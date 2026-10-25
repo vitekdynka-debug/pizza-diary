@@ -1,0 +1,786 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pizza deník</title>
+<meta name="theme-color" content="#b5432a">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<style>
+  :root {
+    --bg: #faf6f1; --surface: #ffffff; --surface-2: #f3ece3; --text: #2a211b; --muted: #7a6b60;
+    --border: #e4d9cc; --accent: #b5432a; --accent-text: #ffffff; --ok: #2f7d4f; --err: #b3261e;
+    --star: #e0a419; --radius: 12px; --shadow: 0 1px 3px rgba(60,40,20,.08);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1b1714; --surface: #251f1b; --surface-2: #2f2722; --text: #f1e9e1; --muted: #a8998d;
+      --border: #3d332c; --accent: #e0694d; --accent-text: #1b1714; --ok: #6cc08f; --err: #ff8a80;
+      --star: #f2bd3a; --shadow: none;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  header {
+    position: sticky; top: 0; z-index: 10; background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    padding: calc(10px + env(safe-area-inset-top)) 16px 10px;
+  }
+  .bar { max-width: 760px; margin: 0 auto; display: flex; align-items: center; gap: 8px; }
+  .bar h1 { font-size: 1.2rem; margin: 0; flex: 1; cursor: pointer; white-space: nowrap; }
+  .tabs { max-width: 760px; margin: 8px auto 0; display: flex; gap: 4px; }
+  .tab { border: none; background: none; border-radius: 0; border-bottom: 2px solid transparent; color: var(--muted); padding: 6px 10px; min-height: 36px; }
+  .tab.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+  .phase-num { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: var(--accent-text); font-size: .8rem; margin-right: 6px; }
+  .warn { color: var(--err); font-size: .9rem; }
+  main { max-width: 760px; margin: 0 auto; padding: 16px; }
+  button, .btn {
+    font: inherit; border: 1px solid var(--border); background: var(--surface); color: var(--text);
+    border-radius: 10px; padding: 8px 14px; cursor: pointer; min-height: 40px;
+  }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
+  button.danger { color: var(--err); }
+  button.icon { padding: 8px 10px; min-width: 40px; }
+  button:disabled { opacity: .5; cursor: default; }
+  input, select, textarea {
+    font: inherit; color: var(--text); background: var(--surface); width: 100%;
+    border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px; min-height: 42px;
+  }
+  textarea { min-height: 90px; resize: vertical; }
+  input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  label { display: block; font-size: .85rem; color: var(--muted); margin-bottom: 4px; }
+  .hidden { display: none !important; }
+  .muted { color: var(--muted); }
+  .small { font-size: .85rem; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+  .grid.wide { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+  fieldset { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; margin: 0 0 16px; background: var(--surface); }
+  legend { font-weight: 600; padding: 0 6px; }
+  .suffix { position: relative; }
+  .suffix input { padding-right: 38px; }
+  .suffix span { position: absolute; right: 11px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; font-size: .9rem; }
+
+  .toolbar { display: flex; gap: 8px; margin-bottom: 14px; }
+  .toolbar input { flex: 1; }
+  .toolbar select { width: auto; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 12px 14px; margin-bottom: 10px; cursor: pointer; box-shadow: var(--shadow);
+  }
+  .card:hover { border-color: var(--accent); }
+  .card h3 { margin: 0 0 2px; font-size: 1.05rem; }
+  .card .meta { display: flex; justify-content: space-between; gap: 8px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip { background: var(--surface-2); border-radius: 999px; padding: 2px 10px; font-size: .82rem; }
+  .stars { color: var(--star); letter-spacing: 1px; white-space: nowrap; }
+  .empty { text-align: center; padding: 40px 16px; color: var(--muted); }
+
+  .stage { display: grid; grid-template-columns: 1fr 90px 90px 40px; gap: 8px; margin-bottom: 8px; align-items: end; }
+  @media (max-width: 480px) {
+    .stage { grid-template-columns: 1fr 1fr 40px; }
+    .stage > :first-child { grid-column: 1 / -1; }
+  }
+  .rating button { font-size: 1.5rem; padding: 0 4px; border: none; background: none; color: var(--border); min-height: 36px; }
+  .rating button.on { color: var(--star); }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; margin-top: 8px; }
+
+  table { width: 100%; border-collapse: collapse; }
+  td, th { padding: 6px 4px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .recipe td:first-child { white-space: nowrap; padding-right: 12px; }
+  .recipe td.num { white-space: normal; overflow-wrap: anywhere; }
+  .section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; margin-bottom: 14px; }
+  .section h2 { font-size: 1rem; margin: 0 0 10px; }
+  .notes { white-space: pre-wrap; }
+
+  #status { font-size: .8rem; color: var(--muted); max-width: 760px; margin: 0 auto; padding: 0 16px; min-height: 0; }
+  #status.err { color: var(--err); }
+  #status.ok { color: var(--ok); }
+  #toast {
+    position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+    background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-size: .9rem;
+    opacity: 0; transition: opacity .2s; pointer-events: none; max-width: calc(100% - 32px);
+  }
+  #toast.show { opacity: 1; }
+  .help { font-size: .85rem; color: var(--muted); }
+  .help ol { padding-left: 20px; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <h1 id="home">🍕 Pizza deník</h1>
+    <button id="btnSync" class="icon hidden" title="Synchronizovat">⟳</button>
+    <button id="btnSettings" class="icon" title="Nastavení a záloha">⚙</button>
+    <button id="btnNew" class="primary">+ Nový</button>
+  </div>
+  <nav class="tabs">
+    <button type="button" class="tab active" data-view="viewList">📒 Deník</button>
+    <button type="button" class="tab" data-view="viewCalc">🧮 Kalkulačka</button>
+  </nav>
+</header>
+<div id="status"></div>
+
+<main>
+  <!-- Seznam -->
+  <section id="viewList">
+    <div class="toolbar">
+      <input id="search" type="search" placeholder="Hledat (název, mouka, poznámky)…">
+      <select id="sort" aria-label="Řazení">
+        <option value="date-desc">Nejnovější</option>
+        <option value="date-asc">Nejstarší</option>
+        <option value="rating">Hodnocení</option>
+        <option value="name">Název</option>
+      </select>
+    </div>
+    <div id="list"></div>
+  </section>
+
+  <!-- Detail -->
+  <section id="viewDetail" class="hidden"></section>
+
+  <!-- Formulář -->
+  <section id="viewForm" class="hidden">
+    <form id="form" autocomplete="off">
+      <fieldset>
+        <legend>Základ</legend>
+        <div class="grid wide">
+          <div><label for="f_name">Název akce / těsta *</label><input id="f_name" required></div>
+          <div><label for="f_date">Datum</label><input id="f_date" type="date"></div>
+        </div>
+        <div style="margin-top:12px"><label for="f_flour">Druh mouky</label>
+          <input id="f_flour" list="flourList" placeholder="např. Caputo Pizzeria 00 (W260)"></div>
+        <datalist id="flourList"></datalist>
+      </fieldset>
+
+      <fieldset>
+        <legend>Receptura (pekařská %, vztaženo k mouce)</legend>
+        <div class="grid">
+          <div><label for="f_hydration">Hydratace</label><div class="suffix"><input id="f_hydration" inputmode="decimal" placeholder="65"><span>%</span></div></div>
+          <div><label for="f_salt">Sůl</label><div class="suffix"><input id="f_salt" inputmode="decimal" placeholder="3"><span>%</span></div></div>
+          <div><label for="f_yeast">Droždí</label><div class="suffix"><input id="f_yeast" inputmode="decimal" placeholder="0,2"><span>%</span></div></div>
+          <div><label for="f_yeastType">Typ droždí</label>
+            <select id="f_yeastType"><option value="">—</option><option>čerstvé</option><option>sušené</option><option>kvásek</option></select></div>
+          <div><label for="f_oil">Olej</label><div class="suffix"><input id="f_oil" inputmode="decimal" placeholder="0"><span>%</span></div></div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Preferment</legend>
+        <label class="row" style="color:var(--text);font-size:1rem;cursor:pointer">
+          <input id="f_prefUsed" type="checkbox" style="width:auto;min-height:0"> Použil jsem preferment
+        </label>
+        <div id="prefBox" class="grid hidden" style="margin-top:12px">
+          <div><label for="f_prefType">Typ</label>
+            <select id="f_prefType"><option>poolish</option><option>biga</option><option>jiný</option></select></div>
+          <div><label for="f_prefPct">Mouky v prefermentu</label><div class="suffix"><input id="f_prefPct" inputmode="decimal" placeholder="30"><span>%</span></div></div>
+          <div><label for="f_prefHours">Doba zrání</label><div class="suffix"><input id="f_prefHours" inputmode="decimal" placeholder="16"><span>h</span></div></div>
+          <div><label for="f_prefTemp">Teplota</label><div class="suffix"><input id="f_prefTemp" inputmode="decimal" placeholder="18"><span>°C</span></div></div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Fáze zrání těsta</legend>
+        <div id="stages"></div>
+        <datalist id="stageList">
+          <option value="Bulk (v celku), pokojová">
+          <option value="Bulk (v celku), lednice">
+          <option value="Boule, lednice">
+          <option value="Boule, pokojová">
+          <option value="Temperování před pečením">
+        </datalist>
+        <div class="row" style="justify-content:space-between">
+          <button type="button" id="addStage">+ Přidat fázi</button>
+          <span class="muted small" id="stageTotal"></span>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Množství a pečení</legend>
+        <div class="grid">
+          <div><label for="f_balls">Počet bochánků</label><input id="f_balls" inputmode="numeric" placeholder="4"></div>
+          <div><label for="f_ballWeight">Váha bochánku</label><div class="suffix"><input id="f_ballWeight" inputmode="decimal" placeholder="260"><span>g</span></div></div>
+        </div>
+        <div style="margin-top:12px"><label for="f_oven">Pec / teplota pečení</label>
+          <input id="f_oven" placeholder="např. Ooni Koda 16, 450 °C, 90 s"></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Výsledek</legend>
+        <label>Hodnocení</label>
+        <div class="rating" id="rating"></div>
+        <div style="margin-top:10px"><label for="f_notes">Poznámky (co se povedlo, co příště jinak)</label>
+          <textarea id="f_notes"></textarea></div>
+      </fieldset>
+
+      <div class="actions">
+        <button type="button" id="cancelForm">Zrušit</button>
+        <button type="submit" class="primary">Uložit</button>
+      </div>
+    </form>
+  </section>
+
+  <!-- Kalkulačka -->
+  <section id="viewCalc" class="hidden">
+    <form id="calcForm" autocomplete="off" onsubmit="return false">
+      <fieldset>
+        <legend>Kolik</legend>
+        <div class="grid">
+          <div><label for="c_balls">Počet pizz</label><input id="c_balls" inputmode="numeric"></div>
+          <div><label for="c_weight">Váha bochánku</label><div class="suffix"><input id="c_weight" inputmode="decimal"><span>g</span></div></div>
+          <div><label for="c_reserve">Rezerva na ztráty</label><div class="suffix"><input id="c_reserve" inputmode="decimal"><span>%</span></div></div>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>Receptura (% z celkové mouky)</legend>
+        <div class="grid">
+          <div><label for="c_hydration">Hydratace</label><div class="suffix"><input id="c_hydration" inputmode="decimal"><span>%</span></div></div>
+          <div><label for="c_salt">Sůl</label><div class="suffix"><input id="c_salt" inputmode="decimal"><span>%</span></div></div>
+          <div><label for="c_oil">Olej</label><div class="suffix"><input id="c_oil" inputmode="decimal"><span>%</span></div></div>
+          <div><label for="c_yeastType">Typ droždí</label>
+            <select id="c_yeastType"><option>čerstvé</option><option>sušené</option><option>kvásek</option></select></div>
+          <div><label for="c_yeastMain">Droždí do hlavního těsta</label><div class="suffix"><input id="c_yeastMain" inputmode="decimal"><span>%</span></div></div>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>Preferment</legend>
+        <div class="grid">
+          <div><label for="c_prefType">Typ</label>
+            <select id="c_prefType"><option value="">bez prefermentu</option><option>poolish</option><option>biga</option><option value="jiný">vlastní</option></select></div>
+          <div class="c-pref"><label for="c_prefPct">Mouky v prefermentu</label><div class="suffix"><input id="c_prefPct" inputmode="decimal"><span>%</span></div></div>
+          <div class="c-pref"><label for="c_prefHyd">Hydratace prefermentu</label><div class="suffix"><input id="c_prefHyd" inputmode="decimal"><span>%</span></div></div>
+          <div class="c-pref"><label for="c_prefYeast">Droždí v prefermentu</label><div class="suffix"><input id="c_prefYeast" inputmode="decimal"><span>%</span></div></div>
+        </div>
+        <p class="muted small c-pref" style="margin-bottom:0">„Mouky v prefermentu“ = kolik % z celkové mouky jde do prefermentu.
+          Droždí v prefermentu je v % z mouky prefermentu.</p>
+      </fieldset>
+    </form>
+    <div id="calcOut"></div>
+    <div class="actions">
+      <button type="button" id="calcReset">Výchozí hodnoty</button>
+      <button type="button" id="calcSave" class="primary">Uložit jako nový pokus</button>
+    </div>
+  </section>
+
+  <!-- Nastavení -->
+  <section id="viewSettings" class="hidden">
+    <div class="section">
+      <h2>Synchronizace PC ↔ mobil (GitHub Gist)</h2>
+      <div class="grid wide">
+        <div><label for="s_token">GitHub token (oprávnění „gist“)</label><input id="s_token" type="password" placeholder="ghp_… nebo github_pat_…"></div>
+        <div><label for="s_gist">ID gistu (nepovinné, najde/vytvoří se samo)</label><input id="s_gist" placeholder="automaticky"></div>
+      </div>
+      <p class="muted small" id="syncInfo"></p>
+      <div class="actions">
+        <button type="button" id="s_disconnect" class="danger">Odpojit</button>
+        <button type="button" id="s_save" class="primary">Uložit a synchronizovat</button>
+      </div>
+      <details class="help">
+        <summary>Jak získat token</summary>
+        <ol>
+          <li>Na GitHubu otevři <a href="https://github.com/settings/tokens/new?scopes=gist&description=Pizza%20den%C3%ADk" target="_blank" rel="noopener">Settings → Developer settings → Tokens (classic) → Generate new token</a>.</li>
+          <li>Zaškrtni jen <b>gist</b>, expiraci nastav třeba na „No expiration“.</li>
+          <li>Token zkopíruj a vlož sem – na PC i na mobilu ten samý.</li>
+        </ol>
+        Data se ukládají do tajného gistu „Pizza deník – data“ ve tvém účtu. Token zůstává jen v tomto prohlížeči.
+      </details>
+    </div>
+
+    <div class="section">
+      <h2>Záloha a přenos</h2>
+      <div class="row">
+        <button type="button" id="exportJson">Export JSON</button>
+        <button type="button" id="exportCsv">Export CSV (Excel)</button>
+        <button type="button" id="importBtn">Import JSON</button>
+        <input type="file" id="importFile" accept=".json,application/json" class="hidden">
+      </div>
+      <p class="muted small">Import data sloučí s existujícími (nic nepřepíše novějším starým).</p>
+    </div>
+    <div class="actions"><button type="button" id="closeSettings">Zpět</button></div>
+  </section>
+</main>
+<div id="toast" role="status"></div>
+
+<script>
+'use strict';
+const DATA_KEY = 'pizzaDenik.data.v1';
+const SETTINGS_KEY = 'pizzaDenik.settings.v1';
+const GIST_FILE = 'pizza-denik.json';
+// Hydratace prefermentu pro výpočet vody (% vody k mouce prefermentu)
+const PREF_WATER = { poolish: 100, biga: 50 };
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const num = (v) => { if (v === null || v === undefined || v === '') return null; const n = parseFloat(String(v).replace(',', '.').replace(/\s/g, '')); return Number.isFinite(n) ? n : null; };
+const fmt = (n, d = 1) => n === null || n === undefined ? '–' : n.toLocaleString('cs-CZ', { maximumFractionDigits: d });
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+const fmtDate = (s) => { if (!s) return ''; const [y, m, d] = s.split('-'); return `${+d}. ${+m}. ${y}`; };
+const stars = (r) => r ? '★'.repeat(r) + '☆'.repeat(5 - r) : '';
+
+function readJson(key, fallback) {
+  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
+}
+function writeJson(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { toast('Nepodařilo se uložit do prohlížeče: ' + e.message); }
+}
+
+let items = readJson(DATA_KEY, []);
+let settings = readJson(SETTINGS_KEY, {});
+const visible = () => items.filter((i) => !i.deleted);
+const saveItems = () => writeJson(DATA_KEY, items);
+const saveSettings = () => writeJson(SETTINGS_KEY, settings);
+
+/* ---------- výpočty ---------- */
+function totalHours(it) {
+  return (it.stages || []).reduce((sum, s) => sum + (num(s.hours) || 0), 0);
+}
+function calcGrams(it, balls = num(it.balls), weight = num(it.ballWeight)) {
+  if (!balls || !weight) return null;
+  const p = (v) => (num(v) || 0) / 100;
+  const total = balls * weight;
+  const flour = total / (1 + p(it.hydration) + p(it.salt) + p(it.yeast) + p(it.oil));
+  const r = { total, flour, water: flour * p(it.hydration), salt: flour * p(it.salt), yeast: flour * p(it.yeast), oil: flour * p(it.oil) };
+  if (it.prefUsed && num(it.prefPct)) {
+    const pf = flour * p(it.prefPct);
+    const wPct = PREF_WATER[it.prefType];
+    r.pref = { flour: pf, water: wPct !== undefined ? pf * wPct / 100 : null };
+  }
+  return r;
+}
+
+/* ---------- navigace ---------- */
+const views = ['viewList', 'viewDetail', 'viewForm', 'viewSettings', 'viewCalc'];
+function show(view) {
+  views.forEach((v) => $(v).classList.toggle('hidden', v !== view));
+  const tab = view === 'viewCalc' ? 'viewCalc' : 'viewList';
+  document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.view === tab));
+  $('btnNew').classList.toggle('hidden', view === 'viewForm');
+  window.scrollTo(0, 0);
+}
+
+/* ---------- seznam ---------- */
+function renderList() {
+  const q = $('search').value.trim().toLowerCase();
+  let list = visible().filter((i) => !q || [i.name, i.flour, i.notes, i.prefType, i.oven].join(' ').toLowerCase().includes(q));
+  const sort = $('sort').value;
+  const byDate = (a, b) => (a.date || '').localeCompare(b.date || '') || (a.createdAt || 0) - (b.createdAt || 0);
+  if (sort === 'date-desc') list.sort((a, b) => byDate(b, a));
+  if (sort === 'date-asc') list.sort(byDate);
+  if (sort === 'rating') list.sort((a, b) => (b.rating || 0) - (a.rating || 0) || byDate(b, a));
+  if (sort === 'name') list.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'cs'));
+
+  if (!visible().length) {
+    $('list').innerHTML = `<div class="empty">Zatím žádné pokusy.<br><br><button class="primary" onclick="openForm()">+ Zapsat první těsto</button></div>`;
+    return;
+  }
+  if (!list.length) { $('list').innerHTML = `<div class="empty">Nic neodpovídá hledání.</div>`; return; }
+  $('list').innerHTML = list.map((i) => {
+    const chips = [];
+    if (num(i.hydration) !== null) chips.push(`H ${fmt(num(i.hydration))} %`);
+    if (num(i.salt) !== null) chips.push(`sůl ${fmt(num(i.salt), 2)} %`);
+    if (num(i.yeast) !== null) chips.push(`droždí ${fmt(num(i.yeast), 3)} %`);
+    if (num(i.oil)) chips.push(`olej ${fmt(num(i.oil), 2)} %`);
+    if (i.prefUsed) chips.push(esc(i.prefType || 'preferment'));
+    const h = totalHours(i); if (h) chips.push(`${fmt(h)} h zrání`);
+    return `<div class="card" data-id="${esc(i.id)}">
+      <div class="meta"><h3>${esc(i.name)}</h3><span class="stars">${stars(i.rating)}</span></div>
+      <div class="muted small">${esc(fmtDate(i.date))}${i.flour ? ' · ' + esc(i.flour) : ''}</div>
+      <div class="chips">${chips.map((c) => `<span class="chip">${c}</span>`).join('')}</div>
+    </div>`;
+  }).join('');
+}
+$('list').addEventListener('click', (e) => { const c = e.target.closest('.card'); if (c) openDetail(c.dataset.id); });
+$('search').addEventListener('input', renderList);
+$('sort').addEventListener('change', renderList);
+
+/* ---------- detail ---------- */
+function openDetail(id) {
+  const i = items.find((x) => x.id === id);
+  if (!i) return;
+  const pct = (v, d = 2) => num(v) === null ? '–' : fmt(num(v), d) + ' %';
+  const stagesRows = (i.stages || []).map((s) => `<tr><td>${esc(s.phase)}</td><td class="num">${fmt(num(s.hours))} h</td><td class="num">${num(s.temp) === null ? '–' : fmt(num(s.temp)) + ' °C'}</td></tr>`).join('');
+  $('viewDetail').innerHTML = `
+    <div class="section">
+      <div class="meta row" style="justify-content:space-between"><h2 style="font-size:1.25rem;margin:0">${esc(i.name)}</h2><span class="stars" style="font-size:1.2rem">${stars(i.rating)}</span></div>
+      <div class="muted">${esc(fmtDate(i.date))}</div>
+    </div>
+    <div class="section">
+      <h2>Receptura</h2>
+      <table class="recipe">
+        <tr><td>Mouka</td><td class="num">${esc(i.flour || '–')}</td></tr>
+        <tr><td>Hydratace</td><td class="num">${pct(i.hydration, 1)}</td></tr>
+        <tr><td>Sůl</td><td class="num">${pct(i.salt)}</td></tr>
+        <tr><td>Droždí${i.yeastType ? ' (' + esc(i.yeastType) + ')' : ''}</td><td class="num">${pct(i.yeast, 3)}</td></tr>
+        <tr><td>Olej</td><td class="num">${pct(i.oil)}</td></tr>
+        <tr><td>Preferment</td><td class="num">${i.prefUsed
+          ? `${esc(i.prefType)}, ${pct(i.prefPct, 1)} mouky, ${fmt(num(i.prefHours))} h při ${fmt(num(i.prefTemp))} °C`
+          : 'ne'}</td></tr>
+        ${i.oven ? `<tr><td>Pečení</td><td class="num" style="white-space:normal">${esc(i.oven)}</td></tr>` : ''}
+      </table>
+    </div>
+    <div class="section">
+      <h2>Fáze zrání ${totalHours(i) ? `<span class="muted small">(celkem ${fmt(totalHours(i))} h)</span>` : ''}</h2>
+      ${stagesRows ? `<table><tr><th>Fáze</th><th class="num">Doba</th><th class="num">Teplota</th></tr>${stagesRows}</table>` : '<span class="muted">Nezadáno</span>'}
+    </div>
+    <div class="section">
+      <h2>Gramáž</h2>
+      <div class="grid" style="margin-bottom:10px">
+        <div><label for="d_balls">Bochánků</label><input id="d_balls" inputmode="numeric" value="${esc(i.balls || '')}" placeholder="4"></div>
+        <div><label for="d_weight">Váha bochánku</label><div class="suffix"><input id="d_weight" inputmode="decimal" value="${esc(i.ballWeight || '')}" placeholder="260"><span>g</span></div></div>
+      </div>
+      <div id="d_grams"></div>
+    </div>
+    ${i.notes ? `<div class="section"><h2>Poznámky</h2><div class="notes">${esc(i.notes)}</div></div>` : ''}
+    <div class="actions">
+      <button class="danger" id="d_delete">Smazat</button>
+      <button id="d_dup">Duplikovat</button>
+      <button class="primary" id="d_edit">Upravit</button>
+    </div>`;
+  const renderGrams = () => {
+    const g = calcGrams(i, num($('d_balls').value), num($('d_weight').value));
+    if (!g) { $('d_grams').innerHTML = '<span class="muted small">Zadej počet a váhu bochánků pro přepočet.</span>'; return; }
+    const row = (n, v, d = 0) => `<tr><td>${n}</td><td class="num">${fmt(v, d)} g</td></tr>`;
+    let html = `<table>${row('Mouka', g.flour)}${row('Voda', g.water)}${row('Sůl', g.salt, 1)}${row('Droždí' + (i.yeastType ? ' (' + esc(i.yeastType) + ')' : ''), g.yeast, 2)}${g.oil ? row('Olej', g.oil, 1) : ''}<tr><th>Celkem těsta</th><th class="num">${fmt(g.total)} g</th></tr></table>`;
+    if (g.pref) {
+      html += `<p class="small" style="margin-bottom:0"><b>Z toho preferment (${esc(i.prefType)}):</b> ${fmt(g.pref.flour, 0)} g mouky` +
+        (g.pref.water !== null ? ` + ${fmt(g.pref.water, 0)} g vody (${PREF_WATER[i.prefType]} % hydratace). Do hlavního těsta: ${fmt(g.flour - g.pref.flour, 0)} g mouky, ${fmt(g.water - g.pref.water, 0)} g vody.` : '.') + '</p>';
+    }
+    $('d_grams').innerHTML = html;
+  };
+  $('d_balls').addEventListener('input', renderGrams);
+  $('d_weight').addEventListener('input', renderGrams);
+  renderGrams();
+  $('d_edit').onclick = () => openForm(i);
+  $('d_dup').onclick = () => openForm({ ...i, id: null, name: i.name + ' (kopie)', date: today(), rating: 0, notes: '' });
+  $('d_delete').onclick = () => {
+    if (!confirm(`Smazat „${i.name}“?`)) return;
+    const idx = items.findIndex((x) => x.id === i.id);
+    items[idx] = { id: i.id, deleted: true, updatedAt: Date.now() };
+    saveItems(); scheduleSync(); renderList(); show('viewList'); toast('Smazáno');
+  };
+  show('viewDetail');
+}
+
+/* ---------- formulář ---------- */
+const fields = ['name', 'date', 'flour', 'hydration', 'salt', 'yeast', 'yeastType', 'oil', 'prefType', 'prefPct', 'prefHours', 'prefTemp', 'balls', 'ballWeight', 'oven', 'notes'];
+let editingId = null;
+let rating = 0;
+
+function stageRow(s = {}) {
+  const div = document.createElement('div');
+  div.className = 'stage';
+  div.innerHTML = `
+    <div><label>Fáze</label><input class="st-phase" list="stageList" placeholder="např. Boule, lednice" value="${esc(s.phase || '')}"></div>
+    <div><label>Hodin</label><input class="st-hours" inputmode="decimal" value="${esc(s.hours ?? '')}"></div>
+    <div><label>°C</label><input class="st-temp" inputmode="decimal" value="${esc(s.temp ?? '')}"></div>
+    <button type="button" class="icon danger" title="Odebrat fázi">✕</button>`;
+  div.querySelector('button').onclick = () => { div.remove(); updateStageTotal(); };
+  div.querySelector('.st-hours').addEventListener('input', updateStageTotal);
+  $('stages').appendChild(div);
+}
+function readStages() {
+  return [...$('stages').querySelectorAll('.stage')].map((d) => ({
+    phase: d.querySelector('.st-phase').value.trim(),
+    hours: d.querySelector('.st-hours').value.trim(),
+    temp: d.querySelector('.st-temp').value.trim(),
+  })).filter((s) => s.phase || s.hours || s.temp);
+}
+function updateStageTotal() {
+  const h = totalHours({ stages: readStages() });
+  $('stageTotal').textContent = h ? `Celkem ${fmt(h)} h` : '';
+}
+function renderRating() {
+  $('rating').innerHTML = [1, 2, 3, 4, 5].map((n) => `<button type="button" data-n="${n}" class="${n <= rating ? 'on' : ''}" aria-label="${n} z 5">★</button>`).join('');
+}
+$('rating').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  const n = +b.dataset.n; rating = rating === n ? 0 : n; renderRating();
+});
+$('f_prefUsed').addEventListener('change', () => $('prefBox').classList.toggle('hidden', !$('f_prefUsed').checked));
+$('addStage').onclick = () => stageRow();
+
+function openForm(it = null) {
+  editingId = it && it.id ? it.id : null;
+  const src = it || { date: today(), yeastType: 'čerstvé', prefType: 'poolish' };
+  fields.forEach((f) => { $('f_' + f).value = src[f] ?? ''; });
+  if (!src.prefType) $('f_prefType').value = 'poolish';
+  $('f_prefUsed').checked = !!src.prefUsed;
+  $('prefBox').classList.toggle('hidden', !src.prefUsed);
+  $('stages').innerHTML = '';
+  const st = src.stages && src.stages.length ? src.stages : [{}];
+  st.forEach((s) => stageRow(s));
+  updateStageTotal();
+  rating = src.rating || 0; renderRating();
+  $('flourList').innerHTML = [...new Set(visible().map((i) => i.flour).filter(Boolean))].map((f) => `<option value="${esc(f)}">`).join('');
+  show('viewForm');
+  if (!editingId) $('f_name').focus();
+}
+window.openForm = openForm;
+
+$('form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const now = Date.now();
+  const existing = editingId ? items.find((x) => x.id === editingId) : null;
+  const it = { id: editingId || uid(), createdAt: existing?.createdAt || now, updatedAt: now };
+  fields.forEach((f) => { it[f] = $('f_' + f).value.trim(); });
+  it.prefUsed = $('f_prefUsed').checked;
+  it.stages = readStages();
+  it.rating = rating;
+  if (existing) items[items.indexOf(existing)] = it; else items.push(it);
+  saveItems(); scheduleSync(); renderList();
+  toast('Uloženo');
+  openDetail(it.id);
+});
+$('cancelForm').onclick = () => { if (editingId) openDetail(editingId); else show('viewList'); };
+
+/* ---------- export / import ---------- */
+function download(name, content, type) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([content], { type }));
+  a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+$('exportJson').onclick = () => download(`pizza-denik-${today()}.json`, JSON.stringify({ app: 'pizza-denik', version: 1, items }, null, 1), 'application/json');
+$('exportCsv').onclick = () => {
+  const cols = [['Název', 'name'], ['Datum', 'date'], ['Mouka', 'flour'], ['Hydratace %', 'hydration'], ['Sůl %', 'salt'], ['Droždí %', 'yeast'], ['Typ droždí', 'yeastType'],
+    ['Olej %', 'oil'], ['Preferment', (i) => i.prefUsed ? 'ano' : 'ne'], ['Typ prefermentu', (i) => i.prefUsed ? i.prefType : ''], ['Preferment % mouky', (i) => i.prefUsed ? i.prefPct : ''],
+    ['Preferment h', (i) => i.prefUsed ? i.prefHours : ''], ['Preferment °C', (i) => i.prefUsed ? i.prefTemp : ''],
+    ['Fáze zrání', (i) => (i.stages || []).map((s) => `${s.phase}: ${s.hours} h @ ${s.temp} °C`).join(' | ')], ['Zrání celkem h', (i) => totalHours(i)],
+    ['Bochánků', 'balls'], ['Váha bochánku g', 'ballWeight'], ['Pečení', 'oven'], ['Hodnocení', 'rating'], ['Poznámky', 'notes']];
+  const cell = (v) => { let s = String(v ?? ''); if (/^-?\d+(\.\d+)?$/.test(s)) s = s.replace('.', ','); return /[;"\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  const rows = visible().map((i) => cols.map(([, k]) => cell(typeof k === 'function' ? k(i) : i[k])).join(';'));
+  download(`pizza-denik-${today()}.csv`, '﻿' + [cols.map((c) => c[0]).join(';'), ...rows].join('\r\n'), 'text/csv;charset=utf-8');
+};
+$('importBtn').onclick = () => $('importFile').click();
+$('importFile').addEventListener('change', async (e) => {
+  const file = e.target.files[0]; e.target.value = '';
+  if (!file) return;
+  try {
+    const data = JSON.parse(await file.text());
+    const incoming = Array.isArray(data) ? data : data.items;
+    if (!Array.isArray(incoming)) throw new Error('soubor neobsahuje seznam pokusů');
+    const before = visible().length;
+    items = merge(items, incoming); saveItems(); scheduleSync(); renderList();
+    toast(`Importováno, přibylo ${visible().length - before} pokusů`);
+  } catch (err) { toast('Import selhal: ' + err.message); }
+});
+
+/* ---------- synchronizace (GitHub Gist) ---------- */
+function merge(a, b) {
+  const map = new Map();
+  for (const it of [...a, ...b]) {
+    if (!it || !it.id) continue;
+    const cur = map.get(it.id);
+    if (!cur || (it.updatedAt || 0) > (cur.updatedAt || 0)) map.set(it.id, it);
+  }
+  return [...map.values()];
+}
+async function gh(method, path, body) {
+  const res = await fetch('https://api.github.com' + path, {
+    method,
+    headers: { Authorization: 'Bearer ' + settings.token, Accept: 'application/vnd.github+json', ...(body ? { 'Content-Type': 'application/json' } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+    cache: 'no-store',
+  });
+  if (!res.ok) {
+    if (res.status === 401) throw new Error('neplatný token');
+    if (res.status === 404) throw new Error('gist nenalezen (nebo token nemá oprávnění „gist“)');
+    throw new Error(`GitHub ${res.status}`);
+  }
+  return res.json();
+}
+async function findGist() {
+  for (let page = 1; page <= 5; page++) {
+    const list = await gh('GET', `/gists?per_page=100&page=${page}`);
+    const g = list.find((x) => x.files && x.files[GIST_FILE]);
+    if (g) return g.id;
+    if (list.length < 100) break;
+  }
+  return null;
+}
+let syncing = false, syncAgain = false, syncTimer = null;
+function scheduleSync() {
+  if (!settings.token) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(sync, 1500);
+}
+async function sync() {
+  if (!settings.token) return;
+  if (syncing) { syncAgain = true; return; }
+  syncing = true;
+  setStatus('Synchronizuji…');
+  $('btnSync').disabled = true;
+  try {
+    let gistId = settings.gistId || await findGist();
+    let remote = [];
+    if (gistId) {
+      const g = await gh('GET', '/gists/' + gistId);
+      const f = g.files[GIST_FILE];
+      if (f) {
+        const text = f.truncated ? await (await fetch(f.raw_url, { cache: 'no-store' })).text() : f.content;
+        remote = JSON.parse(text || '{}').items || [];
+      }
+    }
+    items = merge(items, remote);
+    saveItems();
+    const files = { [GIST_FILE]: { content: JSON.stringify({ app: 'pizza-denik', version: 1, items }, null, 1) } };
+    if (gistId) await gh('PATCH', '/gists/' + gistId, { files });
+    else gistId = (await gh('POST', '/gists', { description: 'Pizza deník – data', public: false, files })).id;
+    settings.gistId = gistId; settings.lastSync = Date.now(); saveSettings();
+    renderList(); renderSettings();
+    setStatus('Synchronizováno ' + new Date().toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' }), 'ok');
+  } catch (err) {
+    setStatus('Synchronizace selhala: ' + (navigator.onLine ? err.message : 'jsi offline') + ' – data jsou uložena v zařízení.', 'err');
+  } finally {
+    syncing = false; $('btnSync').disabled = false;
+    if (syncAgain) { syncAgain = false; sync(); }
+  }
+}
+function setStatus(text, cls = '') {
+  const s = $('status'); s.textContent = text; s.className = cls;
+  if (cls === 'ok') setTimeout(() => { if (s.textContent === text) s.textContent = ''; }, 4000);
+}
+
+/* ---------- nastavení ---------- */
+function renderSettings() {
+  $('s_token').value = settings.token || '';
+  $('s_gist').value = settings.gistId || '';
+  $('btnSync').classList.toggle('hidden', !settings.token);
+  $('syncInfo').textContent = settings.token
+    ? (settings.lastSync ? 'Naposledy synchronizováno: ' + new Date(settings.lastSync).toLocaleString('cs-CZ') : 'Zatím nesynchronizováno.')
+    : 'Synchronizace je vypnutá – data jsou jen v tomto zařízení.';
+}
+$('s_save').onclick = async () => {
+  settings.token = $('s_token').value.trim();
+  settings.gistId = $('s_gist').value.trim();
+  saveSettings(); renderSettings();
+  if (!settings.token) { toast('Zadej token'); return; }
+  await sync();
+  renderSettings();
+};
+$('s_disconnect').onclick = () => {
+  if (!confirm('Odpojit synchronizaci na tomto zařízení? Data zůstanou v zařízení i v gistu.')) return;
+  settings = {}; saveSettings(); renderSettings(); setStatus('');
+};
+$('btnSettings').onclick = () => { renderSettings(); show('viewSettings'); };
+$('closeSettings').onclick = () => show('viewList');
+$('btnSync').onclick = sync;
+$('btnNew').onclick = () => openForm();
+$('home').onclick = () => { renderList(); show('viewList'); };
+
+/* ---------- kalkulačka ---------- */
+const CALC_KEY = 'pizzaDenik.calc.v1';
+const PREF_DEFAULTS = { poolish: { prefHyd: 100, prefYeast: 0.1 }, biga: { prefHyd: 50, prefYeast: 1 }, 'jiný': { prefHyd: 75, prefYeast: 0.5 } };
+const CALC_DEFAULTS = { balls: 10, weight: 280, reserve: 0, hydration: 70, salt: 3, oil: 0, yeastType: 'čerstvé', yeastMain: 0, prefType: 'poolish', prefPct: 50, prefHyd: 100, prefYeast: 0.1 };
+const calcFields = Object.keys(CALC_DEFAULTS);
+
+function fillCalc(v) {
+  calcFields.forEach((f) => { $('c_' + f).value = typeof v[f] === 'number' ? String(v[f]).replace('.', ',') : (v[f] ?? ''); });
+  renderCalc();
+}
+function readCalc() {
+  const v = {};
+  calcFields.forEach((f) => { v[f] = $('c_' + f).value.trim(); });
+  return v;
+}
+function computeCalc(v) {
+  const n = num(v.balls), w = num(v.weight);
+  if (!n || !w) return null;
+  const p = (x) => (num(x) || 0) / 100;
+  const total = n * w * (1 + p(v.reserve));
+  const h = p(v.hydration), s = p(v.salt), o = p(v.oil), yM = p(v.yeastMain);
+  const pf = v.prefType ? p(v.prefPct) : 0, ph = p(v.prefHyd), yP = p(v.prefYeast);
+  const flour = total / (1 + h + s + o + yM + pf * yP);
+  const pref = { flour: flour * pf, water: flour * pf * ph, yeast: flour * pf * yP };
+  const main = { flour: flour - pref.flour, water: flour * h - pref.water, salt: flour * s, yeast: flour * yM, oil: flour * o };
+  return { total, flour, water: flour * h, salt: main.salt, oil: main.oil, yeast: pref.yeast + main.yeast, yeastPct: (yM + pf * yP) * 100, pref, main, hasPref: pf > 0 };
+}
+function renderCalc() {
+  const v = readCalc();
+  document.querySelectorAll('.c-pref').forEach((el) => el.classList.toggle('hidden', !v.prefType));
+  try { localStorage.setItem(CALC_KEY, JSON.stringify(v)); } catch {}
+  const r = computeCalc(v);
+  if (!r) { $('calcOut').innerHTML = '<div class="section muted">Zadej počet pizz a váhu bochánku.</div>'; return; }
+  const yt = esc(v.yeastType);
+  const row = (name, g, d = 0) => `<tr><td>${name}</td><td class="num">${fmt(g, d)} g</td></tr>`;
+  const prefName = v.prefType === 'jiný' ? 'preferment' : esc(v.prefType);
+  let html = '';
+  let step = 1;
+  if (r.hasPref) {
+    html += `<div class="section"><h2><span class="phase-num">${step++}</span>Preferment (${prefName})</h2><table>
+      ${row('Mouka', r.pref.flour)}${row('Voda', r.pref.water)}${r.pref.yeast ? row(`Droždí (${yt})`, r.pref.yeast, 2) : ''}
+      <tr><th>Celkem prefermentu</th><th class="num">${fmt(r.pref.flour + r.pref.water + r.pref.yeast, 0)} g</th></tr></table></div>`;
+  }
+  const warn = r.main.water < 0 ? `<p class="warn">Preferment má víc vody, než dovoluje celková hydratace – sniž hydrataci nebo podíl prefermentu.</p>` : '';
+  html += `<div class="section"><h2><span class="phase-num">${step++}</span>Hlavní těsto</h2><table>
+    ${r.hasPref ? `<tr><td>Preferment (celý)</td><td class="num">${fmt(r.pref.flour + r.pref.water + r.pref.yeast, 0)} g</td></tr>` : ''}
+    ${row('Mouka', r.main.flour)}${row('Voda', r.main.water)}${row('Sůl', r.main.salt, 1)}
+    ${r.main.yeast ? row(`Droždí (${yt})`, r.main.yeast, 2) : ''}${r.main.oil ? row('Olej', r.main.oil, 1) : ''}
+    <tr><th>Celkem těsta</th><th class="num">${fmt(r.total)} g</th></tr></table>${warn}
+    <p class="muted small" style="margin-bottom:0">Rozděl na ${fmt(num(v.balls), 0)} × ${fmt(num(v.balls) ? r.total / num(v.balls) : 0)} g.</p></div>`;
+  html += `<div class="section"><h2>Souhrn surovin</h2><table>
+    <tr><th></th><th class="num">celkem</th><th class="num">% mouky</th></tr>
+    <tr><td>Mouka</td><td class="num">${fmt(r.flour, 0)} g</td><td class="num">100 %</td></tr>
+    <tr><td>Voda</td><td class="num">${fmt(r.water, 0)} g</td><td class="num">${fmt(num(v.hydration))} %</td></tr>
+    <tr><td>Sůl</td><td class="num">${fmt(r.salt, 1)} g</td><td class="num">${fmt(num(v.salt), 2)} %</td></tr>
+    <tr><td>Droždí (${yt})</td><td class="num">${fmt(r.yeast, 2)} g</td><td class="num">${fmt(r.yeastPct, 3)} %</td></tr>
+    ${r.oil ? `<tr><td>Olej</td><td class="num">${fmt(r.oil, 1)} g</td><td class="num">${fmt(num(v.oil), 2)} %</td></tr>` : ''}
+  </table></div>`;
+  $('calcOut').innerHTML = html;
+}
+$('calcForm').addEventListener('input', renderCalc);
+$('c_prefType').addEventListener('change', () => {
+  const d = PREF_DEFAULTS[$('c_prefType').value];
+  if (d) { $('c_prefHyd').value = String(d.prefHyd).replace('.', ','); $('c_prefYeast').value = String(d.prefYeast).replace('.', ','); }
+  renderCalc();
+});
+$('calcReset').onclick = () => fillCalc(CALC_DEFAULTS);
+$('calcSave').onclick = () => {
+  const v = readCalc(), r = computeCalc(v);
+  const s = (x) => x === null || x === undefined ? '' : String(+x.toFixed(3)).replace('.', ',');
+  openForm({
+    date: today(), hydration: v.hydration, salt: v.salt, oil: v.oil, yeastType: v.yeastType,
+    yeast: r ? s(r.yeastPct) : v.yeastMain,
+    prefUsed: !!v.prefType, prefType: v.prefType || 'poolish', prefPct: v.prefType ? v.prefPct : '',
+    balls: v.balls, ballWeight: v.weight,
+    notes: v.prefType ? `Preferment: hydratace ${v.prefHyd} %, droždí ${v.prefYeast} % z mouky prefermentu; do hlavního těsta droždí ${v.yeastMain || 0} %.` : '',
+  });
+};
+document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => {
+  if (t.dataset.view === 'viewList') renderList();
+  show(t.dataset.view);
+}));
+fillCalc({ ...CALC_DEFAULTS, ...readJson(CALC_KEY, {}) });
+
+let toastTimer;
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+/* ---------- start ---------- */
+renderSettings();
+renderList();
+if (settings.token) sync();
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && settings.token && Date.now() - (settings.lastSync || 0) > 60000) sync();
+});
+// Sdílení mezi taby téhož prohlížeče
+window.addEventListener('storage', (e) => { if (e.key === DATA_KEY) { items = readJson(DATA_KEY, []); renderList(); } });
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
